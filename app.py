@@ -1,60 +1,70 @@
-from flask import Flask, render_template, request
-import pickle   
+import streamlit as st
+import pickle
 import numpy as np
 
-app = Flask(__name__)
+@st.cache_resource
+def load_model():
+    with open("model/predictor.pickle", "rb") as file:
+        return pickle.load(file)
 
-def prediction(lst):
-    filename = 'model/predictor.pickle'
-    with open(filename,'rb') as file:
-        model = pickle.load(file)
-    pred_value = model.predict([lst])
-    return pred_value
+model = load_model()
 
-@app.route('/',methods=['POST','GET'])
-def index():
-    pred = 0
-    if request.method == 'POST':
-        ram = request.form['ram']
-        weight = request.form['weight']
-        touchscreen = request.form.getlist('touchscreen')
-        ips = request.form.getlist('ips')
-        company = request.form['company']
-        typename = request.form['typename']
-        opsys = request.form['opsys']
-        cpu = request.form['cpuname']
-        gpu = request.form['gpuname']
-        
-        feature_list = []
-        feature_list.append(int(ram))
-        feature_list.append(float(weight))
-        feature_list.append(len(touchscreen))
-        feature_list.append(len(ips))
-        
-        company_list = ['acer','apple','asus','dell','hp','lenovo','msi','other','toshiba']
-        typename_list = ['2in1convertible','gaming','netbook','notebook','ultrabook','workstation']
-        opsys_list = ['linux','mac','windows','other']
-        gpu_list = ['amd','intel','nvidia']
-        cpu_list = ['amd','intelcorei3','intelcorei5','intelcorei7','other']
-                
-        def traverse(lst,value):
-            for item in lst:
-                if item == value:
-                    feature_list.append(1)
-                else:
-                    feature_list.append(0)         
-        traverse(company_list,company)
-        traverse(typename_list,typename)
-        traverse(opsys_list,opsys)
-        traverse(cpu_list,cpu)
-        traverse(gpu_list,gpu)
-        
-        pred = prediction(feature_list)*380
-        pred = np.round(pred[0])
-        
-    return render_template("index.html", pred=pred)
-    
+st.title("Laptop Price Predictor")
 
-if __name__ == '__main__':
-    app.run(debug=True)
-    
+ram = st.number_input("RAM (GB)", min_value=1, max_value=128, value=8)
+weight = st.number_input("Weight (Kg)", min_value=0.5, max_value=10.0, value=2.0)
+
+touchscreen = st.checkbox("Touchscreen")
+ips = st.checkbox("IPS")
+
+company = st.selectbox("Company", [
+    "acer", "apple", "asus", "dell", "hp", "lenovo", "msi", "other", "toshiba"
+])
+
+typename = st.selectbox("Type Name", [
+    "2in1convertible", "gaming", "netbook", "notebook", "ultrabook", "workstation"
+])
+
+opsys = st.selectbox("Operating System", [
+    "linux", "mac", "windows", "other"
+])
+
+cpu = st.selectbox("CPU", [
+    "amd", "intelcorei3", "intelcorei5", "intelcorei7", "other"
+])
+
+gpu = st.selectbox("GPU", [
+    "amd", "intel", "nvidia"
+])
+
+def add_one_hot(feature_list, options, selected_value):
+    for item in options:
+        if item == selected_value:
+            feature_list.append(1)
+        else:
+            feature_list.append(0)
+
+if st.button("Predict Price"):
+    feature_list = []
+
+    feature_list.append(int(ram))
+    feature_list.append(float(weight))
+    feature_list.append(1 if touchscreen else 0)
+    feature_list.append(1 if ips else 0)
+
+    company_list = ['acer', 'apple', 'asus', 'dell', 'hp', 'lenovo', 'msi', 'other', 'toshiba']
+    typename_list = ['2in1convertible', 'gaming', 'netbook', 'notebook', 'ultrabook', 'workstation']
+    opsys_list = ['linux', 'mac', 'windows', 'other']
+    cpu_list = ['amd', 'intelcorei3', 'intelcorei5', 'intelcorei7', 'other']
+    gpu_list = ['amd', 'intel', 'nvidia']
+
+    add_one_hot(feature_list, company_list, company)
+    add_one_hot(feature_list, typename_list, typename)
+    add_one_hot(feature_list, opsys_list, opsys)
+    add_one_hot(feature_list, cpu_list, cpu)
+    add_one_hot(feature_list, gpu_list, gpu)
+
+    prediction = model.predict([feature_list])
+    price = np.round(prediction[0] * 380)
+
+    st.success(f"Estimated Laptop Price: LKR {price:,.0f}")
